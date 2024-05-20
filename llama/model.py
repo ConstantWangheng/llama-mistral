@@ -349,17 +349,23 @@ class MoE(nn.Module):
 
     def forward(self, x):
         orig_shape = x.shape
+        
+        # x 表示attention层输出，对应每个token位置的embedding
         x = x.view(-1, x.shape[-1])
-
-        scores = self.gate(x)
+        
+        scores = self.gate(x) # 使用gate来获得topk位置对应的权重；
+        
         expert_weights, expert_indices = torch.topk(scores, self.num_experts_per_tok, dim=-1)
-        expert_weights = expert_weights.softmax(dim=-1)
+        expert_weights = expert_weights.softmax(dim=-1) # 取top k个expert
         flat_expert_indices = expert_indices.view(-1)
 
-        x = x.repeat_interleave(self.num_experts_per_tok, dim=0)
+        x = x.repeat_interleave(self.num_experts_per_tok, dim=0)  # 每个expert代表一个专家，每个输入经过一个专家网络（线性层）；
+        
         y = torch.empty_like(x)
         for i, expert in enumerate(self.experts):
             y[flat_expert_indices == i] = expert(x[flat_expert_indices == i])
+            
+        
         y = (y.view(*expert_weights.shape, -1) * expert_weights.unsqueeze(-1)).sum(dim=1)
         return y.view(*orig_shape)
 
